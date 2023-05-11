@@ -1,8 +1,8 @@
  
 dataset:
-  mot_dir: "datasets/DanceTrack"
-  gt_dir: "datasets/DanceTrack"
-  det_dir: "datasets/detections_GHOST/DanceTrack"
+  mot_dir: "/home/share/workspace/datasets/dancetrack"
+  gt_dir: "/home/share/workspace/datasets/dancetrack"
+  det_dir: "/home/share/workspace/datasets/detections_GHOST/DanceTrack"
   det_file: "byte_out.txt" 
   detector: ""
   splits: "dance_val"
@@ -27,7 +27,7 @@ reid_net:
     pool: 'max'
 
 tracker:
-  kalman: 0
+  motion_model: 0  # 0-Linear, 1-KF, 2-SceneMotion
   visualize: 0
   store_feats: 0
   use_bism: 0
@@ -69,3 +69,6 @@ tracker:
     apply_motion_model: 1
     center_only: 0
     combi: 'sum'
+  scene_motion_cfg: 
+    cgf_path: ''
+    ckpt_path: ''

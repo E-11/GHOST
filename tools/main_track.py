@@ -1,3 +1,5 @@
+import sys
+sys.path[0] = "/home/share/workspace/GHOST"
 from email.policy import default
 import yaml
 import argparse

@@ -4,26 +4,27 @@ import os.path as osp
 
 
 def get_dict(mot_dir, detectors):
-    if "MOT17" in mot_dir and detectors != 'all':
-        seq_length = {
-            'MOT17-02-FRCNN': None, 'MOT17-04-FRCNN': None,
-            'MOT17-05-FRCNN': None, 'MOT17-09-FRCNN': None,
-            'MOT17-10-FRCNN': None, 'MOT17-11-FRCNN': None,
-            'MOT17-13-FRCNN': None}
-    elif "MOT17" in mot_dir and detectors == 'all':
-        seq_length = {
-            'MOT17-02-FRCNN': None, 'MOT17-04-FRCNN': None,
-            'MOT17-05-FRCNN': None, 'MOT17-09-FRCNN': None,
-            'MOT17-10-FRCNN': None, 'MOT17-11-FRCNN': None,
-            'MOT17-13-FRCNN': None,
-            'MOT17-02-DPM': None, 'MOT17-04-DPM': None,
-            'MOT17-05-DPM': None, 'MOT17-09-DPM': None,
-            'MOT17-10-DPM': None, 'MOT17-11-DPM': None,
-            'MOT17-13-DPM': None,
-            'MOT17-02-SDP': None, 'MOT17-04-SDP': None,
-            'MOT17-05-SDP': None, 'MOT17-09-SDP': None,
-            'MOT17-10-SDP': None, 'MOT17-11-SDP': None,
-            'MOT17-13-SDP': None}
+    if ("MOT17" in mot_dir) or ("mot" in mot_dir):
+        if detectors != 'all':
+            seq_length = {
+                'MOT17-02-FRCNN': None, 'MOT17-04-FRCNN': None,
+                'MOT17-05-FRCNN': None, 'MOT17-09-FRCNN': None,
+                'MOT17-10-FRCNN': None, 'MOT17-11-FRCNN': None,
+                'MOT17-13-FRCNN': None}
+        elif detectors == 'all':
+            seq_length = {
+                'MOT17-02-FRCNN': None, 'MOT17-04-FRCNN': None,
+                'MOT17-05-FRCNN': None, 'MOT17-09-FRCNN': None,
+                'MOT17-10-FRCNN': None, 'MOT17-11-FRCNN': None,
+                'MOT17-13-FRCNN': None,
+                'MOT17-02-DPM': None, 'MOT17-04-DPM': None,
+                'MOT17-05-DPM': None, 'MOT17-09-DPM': None,
+                'MOT17-10-DPM': None, 'MOT17-11-DPM': None,
+                'MOT17-13-DPM': None,
+                'MOT17-02-SDP': None, 'MOT17-04-SDP': None,
+                'MOT17-05-SDP': None, 'MOT17-09-SDP': None,
+                'MOT17-10-SDP': None, 'MOT17-11-SDP': None,
+                'MOT17-13-SDP': None}
     else:
         seq_length = {
             'MOT20-01': None, 'MOT20-02': None,
@@ -77,14 +78,14 @@ def evaluate_track_eval(dir, tracker, dataset_cfg, gt_path, log=True):
     dataset_config['OUTPUT_FOLDER'] = 'track_eval_output'
     dataset_config['PRINT_CONFIG'] = False
     eval_config['PRINT_CONFIG'] = False
-    if 'Dance' not in gt_path:
+    if ('Dance' not in gt_path) and ('dance' not in gt_path):
         dataset_config['SEQ_INFO'] = get_dict(
             dataset_cfg['mot_dir'], dataset_cfg['detector'])
     else:
         if 'debug' in dataset_cfg['splits']:
             dataset_config['SEQMAP_FILE'] = '/storage/user/seidensc/datasets/DanceTrack/val_seqmap_debug.txt'
         else:
-            dataset_config['SEQMAP_FILE'] = '/storage/user/seidensc/datasets/DanceTrack/val_seqmap.txt'
+            dataset_config['SEQMAP_FILE'] = '/home/share/workspace/OC_SORT/results/gt/seqmaps/DANCE-val.txt'
         dataset_config['SPLIT_TO_EVAL'] = 'val'
     dataset_config['SKIP_SPLIT_FOL'] = True
 

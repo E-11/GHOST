@@ -5,7 +5,7 @@ import numpy as np
 import logging
 from lapsolver import solve_dense
 import json
-from src.tracking_utils import get_proxy, Track, multi_predict, get_iou_kalman
+from src.tracking_utils import get_proxy, Track, multi_predict, get_iou_kalman, scene_motion_predict, load_scene_model
 from src.base_tracker import BaseTracker
 from tqdm import tqdm
 
@@ -161,7 +161,7 @@ class Tracker(BaseTracker):
                 self.tracks[self.id] = Track(
                     track_id=self.id,
                     **detection,
-                    kalman=self.kalman,
+                    motion_model=self.motion_type,
                     kalman_filter=self.kalman_filter)
                 tr_ids.append(self.id)
                 self.id += 1
@@ -306,19 +306,32 @@ class Tracker(BaseTracker):
         # get motion distance
         if self.motion_model_cfg['apply_motion_model']:
 
-            # simple linear motion model
-            if not self.kalman:
-                self.motion()
-                iou = self.get_motion_dist(detections, curr_it)
-
             # kalman fiter
-            else:
+            if self.kalman:
                 self.motion(only_vel=True)
                 stracks = multi_predict(
                     self.tracks,
                     curr_it,
                     self.shared_kalman)
                 iou = get_iou_kalman(stracks, detections)
+            
+            # mggan_motion_model
+            elif self.scene_motion:
+                # self.motion()
+                scene_motion_model = load_scene_model(self.tracker_cfg['scene_motion_cfg']['cgf_path'], self.tracker_cfg['scene_motion_cfg']['ckpt_path'])
+                state = list()
+                act = [v for v in self.tracks.values()]
+                state.extend([1]*len(act))
+                inact = [v for v in curr_it.values()]
+                state.extend([0]*len(inact))
+                stracks = act + inact
+                stracks = scene_motion_predict(stracks, scene_motion_model, with_scene=False)
+                stracks = scene_motion_predict(act, scene_motion_model, with_scene=True)
+            
+            # simple linear motion model
+            else:
+                self.motion()
+                iou = self.get_motion_dist(detections, curr_it)
 
             # combine motion distances
             dist = self.combine_motion_appearance(iou, dist)
@@ -400,7 +413,7 @@ class Tracker(BaseTracker):
                 self.tracks[self.id] = Track(
                     track_id=self.id,
                     **detection,
-                    kalman=self.kalman,
+                    motion_model=self.motion_type,
                     kalman_filter=self.kalman_filter)
                 self.id += 1
             return None, None, None, None
@@ -452,7 +465,7 @@ class Tracker(BaseTracker):
                 self.tracks[self.id] = Track(
                     track_id=self.id,
                     **detections[i],
-                    kalman=self.kalman,
+                    motion_model=self.motion_type,
                     kalman_filter=self.kalman_filter)
                 tr_ids[i] = self.id
                 self.id += 1

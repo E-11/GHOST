@@ -1,16 +1,14 @@
 from ReID import net
 import os.path as osp
 import os
-from data.splits import _SPLITS
+from data_ghost.splits import _SPLITS
 from .tracker import Tracker
 from src.datasets.TrackingDataset import TrackingDataset
 import logging
-import torchreid
 from src.eval_track_eval import evaluate_track_eval
 from src.eval_track_eval_bdd import evaluate_track_eval_bdd
 import pandas as pd
 import json
-import sys
 import numpy as np
 
 

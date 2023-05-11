@@ -33,12 +33,15 @@ class BaseTracker():
             device='cpu'):
 
         # initialize all variables
-        self.kalman = tracker_cfg['kalman']
+        self.motion_type = tracker_cfg['motion_model']
+        self.init_motion()
         if self.kalman:
             self.shared_kalman = KalmanFilter()
             self.kalman_filter = KalmanFilter()
         else:
             self.kalman_filter = None
+
+        self.scene_motion = tracker_cfg['scene_motion']
 
         self.log = True
         self.device = device
@@ -237,8 +240,10 @@ class BaseTracker():
 
         if self.motion_model_cfg['apply_motion_model']:
             self.experiment += 'MM:1'
-            if self.tracker_cfg['kalman']:
+            if self.kalman:
                 self.experiment += 'Kalman'
+            elif self.scene_motion:
+                self.experiment += 'SceneMotion'
             else:
                 self.experiment += str(self.motion_model_cfg['combi'])
 
@@ -592,6 +597,14 @@ class BaseTracker():
 
     def init_feats(self):
         self.features_[self.seq] = dict()
+
+    def init_motion(self):
+        self.kalman = False
+        self.scene_motion = False
+        if self.motion_type == 1:
+            self.kalman = True
+        elif self.motion_type == 2:
+            self.scene_motion = True
 
     def motion_compensation(self, whole_image, im_index):
         """

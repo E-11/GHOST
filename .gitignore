@@ -21,3 +21,4 @@ distances/
 features/
 histograms/
 histograms_features/
+track_eval_output/*

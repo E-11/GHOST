@@ -1,10 +1,10 @@
 dataset:
-  mot_dir: "datasets/MOT17"
-  gt_dir: "datasets/MOT17"
-  det_dir: "datasets/detections_GHOST/MOT17"
+  mot_dir: "/home/share/workspace/datasets/mot"
+  gt_dir: "/home/share/workspace/datasets/mot"
+  det_dir: "/home/share/workspace/datasets/detections_GHOST/MOT17"
   det_file: "qdtrack.txt"  # byte_val.txt # bytetrack_text.txt
   detector: "FRCNN" # "all"
-  splits: "mot17_train_test" #"debug_train_test" #"mot17_test" #"mot17_train_test"
+  splits: "mot17_train" #"debug_train_test" #"mot17_test" #"mot17_train_test"
   validation_set: 0
   half_train_set_gt: 0 
   gt_assign_min_iou: 0.5
@@ -18,7 +18,7 @@ reid_net:
     name: 'Market'
     num_classes: 2820 #751
   encoder_params:
-    pretrained_path: 'ReID/trained_models/market_models/resnet50_Market.pth'
+    pretrained_path: '/home/share/workspace/GHOST/ReID/trained_models/market_models/resnet50_Market.pth'
     net_type: "resnet50" # "IBN" #
     add_distractors: 0
     neck: 0
@@ -26,7 +26,7 @@ reid_net:
     pool: 'max'
 
 tracker:
-  kalman: 0
+  motion_model: 0  # 0-Linear, 1-KF, 2-SceneMotion
   visualize: 0
   store_feats: 0
   use_bism: 0
@@ -69,3 +69,7 @@ tracker:
     apply_motion_model: 1
     center_only: 0
     combi: 'sum'
+  scene_motion: 0
+  scene_motion_cfg: 
+    cgf_path: ''
+    ckpt_path: ''
