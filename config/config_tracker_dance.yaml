@@ -27,7 +27,7 @@ reid_net:
     pool: 'max'
 
 tracker:
-  motion_model: 0  # 0-Linear, 1-KF, 2-SceneMotion
+  motion_model: 1  # 0-Linear, 1-KF, 2-SceneMotion
   visualize: 0
   store_feats: 0
   use_bism: 0

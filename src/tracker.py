@@ -83,7 +83,7 @@ class Tracker(BaseTracker):
                 continue
 
             # iterate over bbs in current frame
-            for f, b, gt_id, v, c, l in zip(feats, boxes, gt_ids, vis, conf, label):
+            for f, b, gt_id, v, c, l, w_img in zip(feats, boxes, gt_ids, vis, conf, label, whole_im):
                 if (b[3] - b[1]) / (b[2] - b[0]
                                     ) < self.tracker_cfg['h_w_thresh']:
                     if c < self.tracker_cfg['det_conf']:
@@ -97,7 +97,8 @@ class Tracker(BaseTracker):
                         'vis': v,
                         'conf': c,
                         'frame': self.frame_id,
-                        'label': l}
+                        'label': l,
+                        'whole_im': w_img}
                     detections.append(detection)
 
                     # store features

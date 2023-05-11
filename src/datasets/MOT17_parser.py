@@ -124,7 +124,7 @@ class MOTLoader():
                     i = int(i)
                 return osp.join(osp.join(img_dir, f"{i:08d}.jpg"))
 
-            if 'Dance' in self.mot_dir:
+            if 'Dance' in self.mot_dir or 'dance' in self.mot_dir:
                 add_frame_path = add_frame_path_dance
             else:
                 add_frame_path = add_frame_path_MOT
