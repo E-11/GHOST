@@ -41,8 +41,6 @@ class BaseTracker():
         else:
             self.kalman_filter = None
 
-        self.scene_motion = tracker_cfg['scene_motion']
-
         self.log = True
         self.device = device
         self.round1_float = lambda x: round(10 * x) / 10
