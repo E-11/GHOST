@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import random
 from src.tracking_utils import get_center, get_height, get_width,\
-    make_pos, warp_pos, bbox_overlaps, is_moving, frame_rate, mot_fps, bisoftmax
+    make_pos, warp_pos, bbox_overlaps, is_moving, frame_rate, mot_fps, bisoftmax, load_scene_model
 import cv2
 import copy
 from src.kalman import KalmanFilter
@@ -33,6 +33,14 @@ class BaseTracker():
             device='cpu'):
 
         # initialize all variables
+        self.log = True
+        self.device = device
+        self.round1_float = lambda x: round(10 * x) / 10
+
+        self.net_type = net_type
+        self.encoder = encoder
+        self.tracker_cfg = tracker_cfg
+        
         self.motion_type = tracker_cfg['motion_model']
         self.init_motion()
         if self.kalman:
@@ -40,15 +48,7 @@ class BaseTracker():
             self.kalman_filter = KalmanFilter()
         else:
             self.kalman_filter = None
-
-        self.log = True
-        self.device = device
-        self.round1_float = lambda x: round(10 * x) / 10
-
-        self.net_type = net_type
-        self.encoder = encoder
-
-        self.tracker_cfg = tracker_cfg
+        
         self.motion_model_cfg = tracker_cfg['motion_config']
         self.output = output if not tracker_cfg['use_bism'] else 'norm'
 
@@ -603,6 +603,7 @@ class BaseTracker():
             self.kalman = True
         elif self.motion_type == 2:
             self.scene_motion = True
+            self.scene_motion_model = load_scene_model(self.tracker_cfg['scene_motion_cfg']['cfg_path'], self.tracker_cfg['scene_motion_cfg']['ckpt_path'])
 
     def motion_compensation(self, whole_image, im_index):
         """

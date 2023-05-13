@@ -7,6 +7,7 @@ from .MOT17_parser import MOTLoader
 from .bdd100k_parser import BDDLoader
 import pandas as pd
 import numpy as np
+import cv2
 import PIL.Image as Image
 from torch.utils.data import Dataset
 import csv
@@ -285,6 +286,7 @@ class Sequence():
         else:
             img = self.to_tensor(Image.open(path).convert("RGB"))
         img_for_det = copy.deepcopy(img)
+        ori_img = cv2.imread(path)
 
         # initialize return lists
         res, dets, ids, vis, areas_out, conf, label = \
@@ -359,7 +361,7 @@ class Sequence():
         res = res.to(self.device)
 
         return res, dets, ids, vis, random_patches, img_for_det.to(
-            self.device), conf, label
+            self.device), conf, label, ori_img
     
     def __len__(self):
         return self.num_frames
@@ -385,8 +387,8 @@ class Sequence():
 
         assert len(dets_frame['frame_path'].unique()) == 1
 
-        img, dets_f, ids, vis, random_patches, img_for_det, conf, label = self._get_images(
+        img, dets_f, ids, vis, random_patches, img_for_det, conf, label, ori_img = self._get_images(
             dets_frame['frame_path'].unique()[0], dets_frame, dets_uncl_frame)
 
         return (img, dets_frame['frame_path'].unique(
-            )[0], dets_f, ids, vis, random_patches, img_for_det, conf, label)
+            )[0], dets_f, ids, vis, random_patches, img_for_det, conf, label, ori_img)

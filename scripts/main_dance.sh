@@ -4,7 +4,7 @@ python tools/main_track.py \
     --act 0.8 \
     --inact 0.9 \
     --inact_patience 50 \
-    --combi sum_0.4 \
+    --combi sum_0.6 \
     --do_inact 0 \
     --on_the_fly 1 \
     --store_feats 0 \

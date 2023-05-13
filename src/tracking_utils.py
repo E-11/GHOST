@@ -254,9 +254,10 @@ class Track():
             conf,
             frame,
             label,
-            whole_im,
+            ori_img,
             motion_model=0,  # 0-Linear, 1-KF, 2-SceneMotion
-            kalman_filter=None):
+            kalman_filter=None,
+            scene_motion_cfg=None):
         '''
         Args:
             - bbox: (4,)
@@ -275,12 +276,13 @@ class Track():
                 measurement=tlrb_to_xyah(bbox))
         
         if self.scene_motion:
-            self.pred_xyxy = None  # torch.Tensor(4,)
-            self.latest_img = crop_img(bbox, scene_motion_cfg, whole_im)  # torch.Tensor(1, 3, 60, 20)
+            self.scene_motion_cfg = scene_motion_cfg
+            self.pred_xyxy = bbox  # numpy.array(4,)
+            self.latest_img = crop_img(bbox, scene_motion_cfg, ori_img)  # torch.Tensor(1, 3, 60, 20)
         
         self.track_id = track_id
         self.pos = bbox  ## xyxy
-        self.bbox = list()
+        self.bbox = list()  ## record tracking results
         self.bbox.append(bbox)
 
         # init variables for motion model
@@ -327,7 +329,7 @@ class Track():
         return len(self.last_pos)
 
     def add_detection(
-            self, bbox, feats, im_index, gt_id, vis, conf, frame, label, whole_im):
+            self, bbox, feats, im_index, gt_id, vis, conf, frame, label, ori_img=None):
         # update all lists / states
         self.pos = bbox
         self.last_pos.append(bbox)
@@ -353,12 +355,17 @@ class Track():
                 self.mean, self.covariance, tlrb_to_xyah(bbox))
         
         if self.scene_motion:
-            self.latest_img = crop_img(bbox, scene_motion_cfg, whole_im)
+            self.latest_img = crop_img(bbox, self.scene_motion_cfg, ori_img)
 
     def update_v(self, v):
         self.past_vs.append(v)
         self.last_v = v
 
+    def scene_update_inactive(self, ori_img):
+        self.pos = self.pred_xyxy
+        self.last_pos.append(self.pred_xyxy)
+        self.latest_img = crop_img(self.pred_xyxy, self.scene_motion_cfg, ori_img)
+    
     @property
     # @jit(nopython=True)
     def tlwh(self):
@@ -476,18 +483,18 @@ def scene_motion_predict(stracks, scene_motion_model, with_scene=False):
     if len(stracks) > 0:
         max_seq_len = 0
         for st in stracks:
-            if max_seq_len < len(st.bbox):
-                max_seq_len = len(st.bbox)
+            if max_seq_len < len(st.last_pos):
+                max_seq_len = len(st.last_pos)
         multi_sequence = []
         multi_d_sequence = []
         multi_imgs = []
         for st in stracks:
-            st_bbox = np.asarray(st.bbox)
+            st_bbox = np.asarray(st.last_pos)
             st_bbox[:, 2:] = st_bbox[:, 2:] - st_bbox[:, :2]  ## xyxy -> xywh
             st_sequence = torch.from_numpy(st_bbox).unsqueeze(0)  ## (1, seq_len, 4)
             st_d_sequence = torch.cat((torch.zeros((1,1,4)), st_sequence[:,1:,:]-st_sequence[:,:-1,:]), dim=1)
-            if len(st.bbox) < max_seq_len:
-                pad_dim = max_seq_len - len(st.bbox)
+            if len(st.last_pos) < max_seq_len:
+                pad_dim = max_seq_len - len(st.last_pos)
                 multi_sequence.append(F.pad(st_sequence.permute(0,2,1), pad=(pad_dim,0,0,0), mode='constant', value=0).permute(0,2,1))
                 multi_d_sequence.append(F.pad(st_d_sequence.permute(0,2,1), pad=(pad_dim,0,0,0), mode='constant', value=0).permute(0,2,1))
             else:
@@ -499,36 +506,34 @@ def scene_motion_predict(stracks, scene_motion_model, with_scene=False):
         multi_sequence = torch.cat(multi_sequence, dim=0).permute(1,0,2).cuda()  ## (seq_len, track_num, 4)
         multi_d_sequence = torch.cat(multi_d_sequence, dim=0).permute(1,0,2).cuda()  ## (seq_len, track_num, 4)
         if with_scene:
-            multi_imgs = torch.cat(multi_imgs, dim=0).cuda()  ## (track_num, 3, 48, 16)
+            multi_imgs = torch.cat(multi_imgs, dim=0).cuda()  ## (track_num, 3, 60, 20)
         else:
             multi_imgs = None
         multi_pred, _, _ = scene_motion_model(multi_sequence, multi_d_sequence, img=multi_imgs, num_samples=1)  ## (track_num, 4)
         for i in range(multi_pred.abs.shape[0]):
-            stracks[i].pred_xyxy = multi_pred.abs[i, :].cpu()
-            stracks[i].pred_xyxy[2:] = stracks[i].pred_xyxy[:2] + stracks[i].pred_xyxy[2:]
-    
-    return stracks
+            stracks[i].pred_xyxy = multi_pred.abs[i, :].cpu().detach().numpy()
+            stracks[i].pred_xyxy[2:] = stracks[i].pred_xyxy[:2] + stracks[i].pred_xyxy[2:]  ## tlwh -> xyxy
 
 
-def crop_img(bbox, scene_motion_cfg, whole_im):
+def crop_img(bbox, scene_motion_cfg, ori_img):
     '''
     Args:
-        - img: Tensor[[1, h, w, 3]]
+        - img: cv2.imread, (h, w, 3)
         - bbox: np.array([x, y, x, y])
     Return:
         - img_tensor: Tensor(1, 3, 60, 20)
     '''
-    buffer_scale_w = scene_motion_cfg['buffer_scale_w']
-    buffer_scale_h = scene_motion_cfg['buffer_scale_h']
-    resize_img_w = scene_motion_cfg['resize_img_w']
-    resize_img_h = scene_motion_cfg['resize_img_h']
+    cfg = ConfigParser()
+    cfg.read(scene_motion_cfg, encoding="UTF-8")
+    resize_img_h = cfg.getint("Motion Model", "resize_img_h")
+    resize_img_w = cfg.getint("Motion Model", "resize_img_w")
+    buffer_scale_h = cfg.getfloat("Motion Model", "buffer_scale_h")
+    buffer_scale_w = cfg.getfloat("Motion Model", "buffer_scale_w")
     bbox_tlwh = bbox.copy()
     bbox_tlwh[2:] = bbox_tlwh[2:] - bbox_tlwh[:2]
-    cv_img = whole_im[0].type(torch.uint8).numpy()   ### img type
 
-    imgw = cv_img.shape[1]
-    imgh = cv_img.shape[0]
-
+    imgh = ori_img.shape[0]
+    imgw = ori_img.shape[1]
     # buffer bbox region: (x-bw, y-bh, w+bw, h+bh)
     bx = int(bbox_tlwh[0] - bbox_tlwh[2] * buffer_scale_w)
     by = int(bbox_tlwh[1] - bbox_tlwh[3] * buffer_scale_h)
@@ -536,11 +541,15 @@ def crop_img(bbox, scene_motion_cfg, whole_im):
     bh = int(bbox_tlwh[3] + bbox_tlwh[3] * buffer_scale_h)
     # clip bboxes inside image (realized in gen_mggan_motion_data.py)
     xyxy = np.asarray([bx, by, bx+bw, by+bh])
-    xyxy[0::2] = xyxy[0::2].clip(0, imgw)
-    xyxy[1::2] = xyxy[1::2].clip(0, imgh)
+    
+    # xyxy[0::2] = xyxy[0::2].clip(0, imgw)
+    # xyxy[1::2] = xyxy[1::2].clip(0, imgh)
+    np.clip(xyxy[:2], np.array([0,0]), np.array([imgw-2, imgh-2]), out=xyxy[:2])
+    np.clip(xyxy[2:], np.array([xyxy[0]+1,xyxy[1]+1]), np.array([imgw, imgh]), out=xyxy[2:])
 
-    crop = cv_img[xyxy[1]:xyxy[3], xyxy[0]:xyxy[2]]  ## [y1:y2, x1:x2]
+    crop = ori_img[xyxy[1]:xyxy[3], xyxy[0]:xyxy[2]]  ## [y1:y2, x1:x2]
     crop = cv2.resize(crop, (resize_img_w, resize_img_h), interpolation=cv2.INTER_LINEAR)
+    
     img_tensor = torch.tensor(crop).unsqueeze(0).float().permute(0, 3, 1, 2).cuda()
     return img_tensor
 
@@ -555,6 +564,8 @@ def get_iou_scene(tracklets, detections):
 
     atlbrs = [track.pred_xyxy for track in tracklets]
     btlbrs = [track['bbox'] for track in detections]
+    # print('###########get iou scene: \n', len(atlbrs))
+    # print(len(btlbrs))
     _ious = ious(atlbrs, btlbrs)
     cost_matrix = 1 - _ious
 

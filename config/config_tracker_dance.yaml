@@ -27,7 +27,7 @@ reid_net:
     pool: 'max'
 
 tracker:
-  motion_model: 1  # 0-Linear, 1-KF, 2-SceneMotion
+  motion_model: 0  # 0-Linear, 1-KF, 2-SceneMotion
   visualize: 0
   store_feats: 0
   use_bism: 0
@@ -70,5 +70,5 @@ tracker:
     center_only: 0
     combi: 'sum'
   scene_motion_cfg: 
-    cgf_path: ''
-    ckpt_path: ''
+    cfg_path: '/home/share/exp_result/mggan_motion/dance_buffer_img_60x20_g3/dance_buffer_img_60x20_g3.cfg'
+    ckpt_path: '/home/share/exp_result/mggan_motion/dance_buffer_img_60x20_g3/44_ckpt.pth.tar'

@@ -5,7 +5,7 @@ import numpy as np
 import logging
 from lapsolver import solve_dense
 import json
-from src.tracking_utils import get_proxy, Track, multi_predict, get_iou_kalman, scene_motion_predict, load_scene_model
+from src.tracking_utils import get_proxy, Track, multi_predict, get_iou_kalman, scene_motion_predict, get_iou_scene
 from src.base_tracker import BaseTracker
 from tqdm import tqdm
 
@@ -56,7 +56,7 @@ class Tracker(BaseTracker):
         # iterate over frames
         for frame_data in tqdm(seq, total=len(seq)):
             frame, path, boxes, gt_ids, vis, \
-                random_patches, whole_im, conf, label = frame_data
+                random_patches, whole_im, conf, label, ori_img = frame_data
             # log if in training mode
             if i == 0:
                 logger.info(f'Network in training mode: {self.encoder.training}')
@@ -83,7 +83,7 @@ class Tracker(BaseTracker):
                 continue
 
             # iterate over bbs in current frame
-            for f, b, gt_id, v, c, l, w_img in zip(feats, boxes, gt_ids, vis, conf, label, whole_im):
+            for f, b, gt_id, v, c, l in zip(feats, boxes, gt_ids, vis, conf, label):
                 if (b[3] - b[1]) / (b[2] - b[0]
                                     ) < self.tracker_cfg['h_w_thresh']:
                     if c < self.tracker_cfg['det_conf']:
@@ -97,8 +97,7 @@ class Tracker(BaseTracker):
                         'vis': v,
                         'conf': c,
                         'frame': self.frame_id,
-                        'label': l,
-                        'whole_im': w_img}
+                        'label': l}
                     detections.append(detection)
 
                     # store features
@@ -110,7 +109,7 @@ class Tracker(BaseTracker):
                 self.motion_compensation(whole_im, i)
 
             # association over frames
-            tr_ids = self._track(detections, i)
+            tr_ids = self._track(detections, i, ori_img)
 
             # visualize bounding boxes
             if self.store_visualization:
@@ -150,7 +149,7 @@ class Tracker(BaseTracker):
                 json.dump(self.features_, jf)
             self.features_ = defaultdict(dict)
 
-    def _track(self, detections, i):
+    def _track(self, detections, i, ori_img):
         # get inactive tracks with inactive < patience
         self.curr_it = {k: track for k, track in self.inactive_tracks.items()
                         if track.inactive_count <= self.inact_patience}
@@ -162,8 +161,10 @@ class Tracker(BaseTracker):
                 self.tracks[self.id] = Track(
                     track_id=self.id,
                     **detection,
+                    ori_img=ori_img,
                     motion_model=self.motion_type,
-                    kalman_filter=self.kalman_filter)
+                    kalman_filter=self.kalman_filter,
+                    scene_motion_cfg=self.tracker_cfg['scene_motion_cfg']['cfg_path'])
                 tr_ids.append(self.id)
                 self.id += 1
 
@@ -175,7 +176,7 @@ class Tracker(BaseTracker):
                 # get proxy features of tracks first and compute distance then
                 if not self.tracker_cfg['avg_inact']['proxy'] == 'each_sample':
                     dist, row, col, ids = self.get_hungarian_with_proxy(
-                        detections, sep=self.tracker_cfg['assign_separately'])
+                        detections, sep=self.tracker_cfg['assign_separately'], ori_img=ori_img)
 
                 # get aveage of distances to all detections in track --> proxy dist
                 else:
@@ -192,7 +193,8 @@ class Tracker(BaseTracker):
                     row=row,
                     col=col,
                     ids=ids,
-                    sep=self.tracker_cfg['assign_separately'])
+                    sep=self.tracker_cfg['assign_separately'],
+                    ori_img=ori_img)
 
         return tr_ids
 
@@ -248,6 +250,7 @@ class Tracker(BaseTracker):
 
         # get new detections
         x = torch.stack([t['feats'] for t in detections])
+        # print(f'###########get_hungarian_each_sample, x: {x.shape}')
         dist_all, ids = list(), list()
 
         # if setting dist values between classes to nan before hungarian
@@ -309,7 +312,7 @@ class Tracker(BaseTracker):
 
             # kalman fiter
             if self.kalman:
-                self.motion(only_vel=True)
+                # self.motion(only_vel=True)
                 stracks = multi_predict(
                     self.tracks,
                     curr_it,
@@ -319,15 +322,16 @@ class Tracker(BaseTracker):
             # mggan_motion_model
             elif self.scene_motion:
                 # self.motion()
-                scene_motion_model = load_scene_model(self.tracker_cfg['scene_motion_cfg']['cgf_path'], self.tracker_cfg['scene_motion_cfg']['ckpt_path'])
                 state = list()
                 act = [v for v in self.tracks.values()]
                 state.extend([1]*len(act))
                 inact = [v for v in curr_it.values()]
                 state.extend([0]*len(inact))
                 stracks = act + inact
-                stracks = scene_motion_predict(stracks, scene_motion_model, with_scene=False)
-                stracks = scene_motion_predict(act, scene_motion_model, with_scene=True)
+                # print(f'###########solve hungarian\n{len(act)}\n{len(inact)}')
+                scene_motion_predict(stracks, self.scene_motion_model, with_scene=False)
+                scene_motion_predict(act, self.scene_motion_model, with_scene=True)
+                iou = get_iou_scene(stracks, detections)
             
             # simple linear motion model
             else:
@@ -360,7 +364,7 @@ class Tracker(BaseTracker):
 
         return dist, row, col
 
-    def get_hungarian_with_proxy(self, detections, sep=False):
+    def get_hungarian_with_proxy(self, detections, sep=False, ori_img=None):
         """
         Use proxy feature vectors for distance computation
         """
@@ -414,8 +418,10 @@ class Tracker(BaseTracker):
                 self.tracks[self.id] = Track(
                     track_id=self.id,
                     **detection,
+                    ori_img=ori_img,
                     motion_model=self.motion_type,
-                    kalman_filter=self.kalman_filter)
+                    kalman_filter=self.kalman_filter,
+                    scene_motion_cfg=self.tracker_cfg['scene_motion_cfg']['cfg_path'])
                 self.id += 1
             return None, None, None, None
 
@@ -428,7 +434,7 @@ class Tracker(BaseTracker):
 
         return dist, row, col, ids
 
-    def assign(self, detections, dist, row, col, ids, sep=False):
+    def assign(self, detections, dist, row, col, ids, sep=False, ori_img=None):
         """
         Filter hungarian assignments using matching thresholds
         either assigning active and inactive together or separately
@@ -439,10 +445,10 @@ class Tracker(BaseTracker):
         if len(detections) > 0:
             if not sep:
                 assigned = self.assign_act_inact_same_time(
-                    row, col, dist, detections, active_tracks, ids, tr_ids)
+                    row, col, dist, detections, active_tracks, ids, tr_ids, ori_img)
             else:
                 assigned = self.assign_separatly(
-                    row, col, dist, detections, active_tracks, ids, tr_ids)
+                    row, col, dist, detections, active_tracks, ids, tr_ids, ori_img)
 
         # move tracks not used to inactive tracks
         keys = list(self.tracks.keys())
@@ -459,6 +465,8 @@ class Tracker(BaseTracker):
         for k in self.inactive_tracks.keys():
             self.inactive_tracks[k].inactive_count += self.frame_id - \
                 self.prev_frame
+            if self.scene_motion:
+                self.inactive_tracks[k].scene_update_inactive(ori_img)
 
         # start new track with unassigned detections if conf > thresh
         for i in range(len(detections)):
@@ -466,8 +474,10 @@ class Tracker(BaseTracker):
                 self.tracks[self.id] = Track(
                     track_id=self.id,
                     **detections[i],
+                    ori_img=ori_img,
                     motion_model=self.motion_type,
-                    kalman_filter=self.kalman_filter)
+                    kalman_filter=self.kalman_filter,
+                    scene_motion_cfg=self.tracker_cfg['scene_motion_cfg']['cfg_path'])
                 tr_ids[i] = self.id
                 self.id += 1
         return tr_ids
@@ -480,7 +490,8 @@ class Tracker(BaseTracker):
             detections,
             active_tracks,
             ids,
-            tr_ids):
+            tr_ids,
+            ori_img):
         """
         Assign active and inactive at the same time
         """
@@ -492,7 +503,7 @@ class Tracker(BaseTracker):
             if ids[c] in self.tracks.keys() and \
                     dist[r, c] < self.act_reid_thresh:
 
-                self.tracks[ids[c]].add_detection(**detections[r])
+                self.tracks[ids[c]].add_detection(**detections[r], ori_img=ori_img)
                 active_tracks.append(ids[c])
                 assigned.append(r)
                 tr_ids[r] = ids[c]
@@ -505,7 +516,7 @@ class Tracker(BaseTracker):
                 del self.inactive_tracks[ids[c]]
                 self.tracks[ids[c]].inactive_count = 0
 
-                self.tracks[ids[c]].add_detection(**detections[r])
+                self.tracks[ids[c]].add_detection(**detections[r], ori_img=ori_img)
                 active_tracks.append(ids[c])
                 assigned.append(r)
                 tr_ids[r] = ids[c]
@@ -520,7 +531,8 @@ class Tracker(BaseTracker):
             detections,
             active_tracks,
             ids,
-            tr_ids):
+            tr_ids,
+            ori_img):
         """
         Assign active and inactive one after another
         """
@@ -532,7 +544,8 @@ class Tracker(BaseTracker):
             detections,
             active_tracks,
             ids[:dist[0].shape[1]],
-            tr_ids)
+            tr_ids,
+            ori_img)
 
         # assign inactive tracks
         if dist[1] is not None:
@@ -552,7 +565,8 @@ class Tracker(BaseTracker):
                     detections=[t for i, t in enumerate(detections) if i in u],
                     active_tracks=active_tracks,
                     ids=ids[dist[0].shape[1]:],
-                    tr_ids=tr_ids)
+                    tr_ids=tr_ids,
+                    ori_img=ori_img)
                 assigned_2 = set(
                     [u for i, u in enumerate(u) if i in assigned_2])
                 assigned.update(assigned_2)
