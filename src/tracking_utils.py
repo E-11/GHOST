@@ -258,10 +258,10 @@ class Track():
             motion_model=0,  # 0-Linear, 1-KF, 2-SceneMotion
             kalman_filter=None,
             scene_motion_cfg=None):
-        '''
+        """
         Args:
             - bbox: (4,)
-        '''
+        """
         self.kalman = False
         self.scene_motion = False
         if motion_model == 1:

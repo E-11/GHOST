@@ -178,7 +178,7 @@ class Tracker(BaseTracker):
                     dist, row, col, ids = self.get_hungarian_with_proxy(
                         detections, sep=self.tracker_cfg['assign_separately'], ori_img=ori_img)
 
-                # get aveage of distances to all detections in track --> proxy dist
+                # get average of distances to all detections in track --> proxy dist
                 else:
                     dist, row, col, ids = self.get_hungarian_each_sample(
                         detections, sep=self.tracker_cfg['assign_separately'])
