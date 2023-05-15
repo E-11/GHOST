@@ -4,7 +4,7 @@
 *.pth
 *.csv
 *.pyc
-.idea/
+./.idea/
 data/*
 runs/*
 out/*
